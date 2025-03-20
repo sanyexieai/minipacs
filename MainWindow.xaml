@@ -9,15 +9,39 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <StackPanel Orientation="Horizontal" Margin="10">
+        <!-- 服务器配置 -->
+        <GroupBox Header="服务器配置" Margin="10">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="监听端口：" VerticalAlignment="Center"/>
+                <TextBox x:Name="ServerPort" Width="100" Text="11112" Margin="5,0,10,0"/>
+                <Button Content="启动服务器" Click="StartServer_Click" Margin="0,0,10,0"/>
+                <Button Content="停止服务器" Click="StopServer_Click"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- 远程服务器配置 -->
+        <GroupBox Grid.Row="1" Header="远程服务器配置" Margin="10">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="主机：" VerticalAlignment="Center"/>
+                <TextBox x:Name="RemoteHost" Width="150" Text="localhost" Margin="5,0,10,0"/>
+                <TextBlock Text="端口：" VerticalAlignment="Center"/>
+                <TextBox x:Name="RemotePort" Width="100" Text="11122" Margin="5,0,10,0"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- 操作按钮 -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="10">
             <Button Content="导入DICOM" Click="ImportDicom_Click" Margin="0,0,10,0"/>
             <Button Content="刷新列表" Click="RefreshList_Click"/>
         </StackPanel>
 
-        <ListView Grid.Row="1" ItemsSource="{Binding DicomFiles}" Margin="10">
+        <!-- 文件列表 -->
+        <ListView Grid.Row="3" ItemsSource="{Binding DicomFiles}" Margin="10">
             <ListView.View>
                 <GridView>
                     <GridViewColumn Header="患者姓名" DisplayMemberBinding="{Binding PatientName}" Width="150"/>

@@ -31,7 +31,6 @@ public partial class MainWindow : Window
         InitializeComponent();
         DicomFiles = new ObservableCollection<DicomFileInfo>();
         DataContext = this;  // 设置数据上下文
-        InitializeDicomServer();
         CreateStorageDirectory();
     }
 
@@ -43,47 +42,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void InitializeDicomServer()
-    {
-        try
-        {
-            var port = 11112; // 使用标准DICOM端口
-
-            // 创建日志工厂
-            using var loggerFactory = LoggerFactory.Create(builder =>
-            {
-                builder.SetMinimumLevel(LogLevel.Debug);
-                builder.AddConsole();
-            });
-
-            // 创建服务集合并配置服务
-            var services = new ServiceCollection();
-            services.AddFellowOakDicom();
-            services.AddSingleton<ILoggerFactory>(loggerFactory);
-            services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
-
-            // 构建服务提供者
-            var serviceProvider = services.BuildServiceProvider();
-            DicomSetupBuilder.UseServiceProvider(serviceProvider);
-
-            // 获取服务器工厂
-            var serverFactory = serviceProvider.GetRequiredService<IDicomServerFactory>();
-
-            // 确保存储目录存在
-            if (string.IsNullOrEmpty(_storageFolder))
-            {
-                _storageFolder = Path.Combine(Environment.CurrentDirectory, "DicomStorage");
-            }
-            Directory.CreateDirectory(_storageFolder);
-
-            // 启动DICOM服务器
-            _server = serverFactory.Create<DicomUnifiedProvider>(port);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"初始化DICOM服务器失败: {ex.Message}");
-        }
-    }
     private async void ImportDicom_Click(object sender, RoutedEventArgs e)
     {
         var openFileDialog = new Microsoft.Win32.OpenFileDialog
@@ -137,6 +95,10 @@ public partial class MainWindow : Window
 
     private async void RefreshList_Click(object sender, RoutedEventArgs e)
     {
+        RefreshList();
+    }
+    private async void RefreshList()
+    {
         try
         {
             DicomFiles.Clear();
@@ -150,6 +112,52 @@ public partial class MainWindow : Window
         {
             MessageBox.Show($"刷新列表失败: {ex.Message}");
         }
+    }
+    private void StartServer_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            // 创建日志工厂
+            using var loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder.SetMinimumLevel(LogLevel.Debug);
+                builder.AddConsole();
+            });
+
+            // 创建服务集合并配置服务
+            var services = new ServiceCollection();
+            services.AddFellowOakDicom();
+            services.AddSingleton<ILoggerFactory>(loggerFactory);
+            services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
+
+            // 构建服务提供者
+            var serviceProvider = services.BuildServiceProvider();
+            DicomSetupBuilder.UseServiceProvider(serviceProvider);
+
+            // 获取服务器工厂
+            var serverFactory = serviceProvider.GetRequiredService<IDicomServerFactory>();
+
+            // 确保存储目录存在
+            if (string.IsNullOrEmpty(_storageFolder))
+            {
+                _storageFolder = Path.Combine(Environment.CurrentDirectory, "DicomStorage");
+            }
+            Directory.CreateDirectory(_storageFolder);
+
+            // 启动DICOM服务器
+            _server = serverFactory.Create<DicomUnifiedProvider>(int.Parse(ServerPort.Text));
+            RefreshList();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"初始化DICOM服务器失败: {ex.Message}");
+        }
+    }
+
+    private void StopServer_Click(object sender, RoutedEventArgs e)
+    {
+        _server.Stop();
+        _server.Dispose();
     }
 }
 

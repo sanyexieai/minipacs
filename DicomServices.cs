@@ -7,6 +7,9 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
+using FellowOakDicom.Network.Client;
+using System.Windows;
 
 namespace minipacs
 {
@@ -106,63 +109,123 @@ namespace minipacs
 
         public async IAsyncEnumerable<DicomCMoveResponse> OnCMoveRequestAsync(DicomCMoveRequest request)
         {
-            var matchingFiles = new List<string>();
-            var files = Directory.GetFiles(_storageFolder, "*.dcm", SearchOption.AllDirectories);
-
-            // 首先收集所有匹配的文件
-            foreach (var file in files)
+            _logger.LogInformation($"收到C-MOVE请求，目标AE: {request.DestinationAE}");
+            
+            // 先获取匹配的文件
+            var matchingFiles = await GetMatchingFiles(request);
+            
+            if (!matchingFiles.Any())
             {
-                try
-                {
-                    var dicomFile = await DicomFile.OpenAsync(file);
-                    if (MatchesQuery(request.Dataset, dicomFile.Dataset))
-                    {
-                        matchingFiles.Add(file);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger?.LogError(ex, "Failed to open DICOM file: {file}", file);
-                }
+                yield return new DicomCMoveResponse(request, DicomStatus.Success);
+                yield break;
             }
 
-            // 发送初始响应
-            yield return new DicomCMoveResponse(request, DicomStatus.Pending)
-            {
-                Remaining = matchingFiles.Count,
-                Completed = 0
-            };
+            _logger.LogInformation($"找到{matchingFiles.Count}个匹配文件");
+            
+            int completed = 0;
+            int warnings = 0;
 
-            var completed = 0;
-            var failed = 0;
-
-            // 处理每个匹配的文件
             foreach (var file in matchingFiles)
             {
-                try
-                {
-                    // TODO: 实现实际的文件传输逻辑
-                    completed++;
-                }
-                catch (Exception ex)
-                {
-                    Logger?.LogError(ex, "Failed to move file: {file}", file);
-                    failed++;
-                }
+                var (success, warning) = await ProcessFile(file, request);
+                if (success) completed++;
+                if (warning) warnings++;
 
                 yield return new DicomCMoveResponse(request, DicomStatus.Pending)
                 {
-                    Remaining = matchingFiles.Count - completed - failed,
-                    Completed = completed
+                    Remaining = matchingFiles.Count - completed,
+                    Completed = completed,
+                    Warnings = warnings
                 };
             }
 
-            // 发送最终响应
             yield return new DicomCMoveResponse(request, DicomStatus.Success)
             {
                 Remaining = 0,
-                Completed = completed
+                Completed = completed,
+                Warnings = warnings
             };
+        }
+
+        private async Task<List<string>> GetMatchingFiles(DicomCMoveRequest request)
+        {
+            try
+            {
+                return Directory.GetFiles(_storageFolder, "*.dcm", SearchOption.AllDirectories)
+                    .Where(file =>
+                    {
+                        try
+                        {
+                            var dataset = DicomFile.Open(file).Dataset;
+                            return MatchesQuery(request.Dataset, dataset);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "处理文件失败: {file}", file);
+                            return false;
+                        }
+                    })
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "获取匹配文件失败");
+                return new List<string>();
+            }
+        }
+
+        private async Task<(bool success, bool warning)> ProcessFile(string file, DicomCMoveRequest request)
+        {
+            try
+            {
+                _logger.LogInformation($"开始处理文件: {file}");
+                var dicomFile = await DicomFile.OpenAsync(file);
+
+                // 从主窗口获取配置
+                var mainWindow = Application.Current.MainWindow as MainWindow;
+                var host = mainWindow?.RemoteHost?.Text ?? "localhost";
+                var port = int.Parse(mainWindow?.RemotePort?.Text ?? "11122");
+
+                var clientOptions = new DicomClientOptions
+                {
+                    AssociationRequestTimeoutInMs = 5000,
+                    AssociationReleaseTimeoutInMs = 5000,
+                    AssociationLingerTimeoutInMs = 5000
+                };
+
+                var serviceOptions = new DicomServiceOptions
+                {
+                    LogDataPDUs = true,
+                    LogDimseDatasets = true
+                };
+
+                // 创建C-STORE客户端
+                var client = DicomClientFactory.Create(
+                    host,                   // 从界面获取主机
+                    port,                   // 从界面获取端口
+                    false,                  // 不使用TLS
+                    "MOVESCU",             // 调用AE
+                    request.DestinationAE  // 被调用AE
+                );
+
+                // 配置客户端选项
+                client.NegotiateAsyncOps();
+
+                // 创建C-STORE请求
+                var storeRequest = new DicomCStoreRequest(dicomFile);
+
+                _logger.LogInformation($"开始发送文件到 {host}:{port}");
+                await client.AddRequestAsync(storeRequest);
+                await client.SendAsync();
+                _logger.LogInformation($"文件发送完成: {file}");
+
+                return (true, false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"处理文件失败: {file}");
+                return (false, true);
+            }
         }
         #endregion
 
@@ -299,55 +362,33 @@ namespace minipacs
 
         private bool MatchesQuery(DicomDataset query, DicomDataset dataset)
         {
-            // 检查是否所有查询条件都是空字符串
-            bool allEmpty = true;
-            foreach (var tag in query)
-            {
-                string value = query.GetString(tag.Tag);
-                if (!string.IsNullOrWhiteSpace(value))
-                {
-                    allEmpty = false;
-                    break;
-                }
-            }
-
-            // 如果所有条件都是空字符串，返回true表示匹配所有记录
-            if (allEmpty)
-                return true;
-
-            // 如果有非空条件，进行正常匹配
             foreach (var tag in query)
             {
                 var queryValue = query.GetString(tag.Tag);
-
-                // 跳过空白字符串条件
-                if (string.IsNullOrWhiteSpace(queryValue))
+                if (string.IsNullOrEmpty(queryValue))
+                {
                     continue;
-
-                // 检查标签是否存在
+                }
                 if (dataset.Contains(tag.Tag))
                 {
                     var datasetValue = dataset.GetString(tag.Tag);
 
-                    // 检查是否匹配
-                    if (!WildcardMatch(queryValue, datasetValue))
+                    // 处理通配符
+                    if (queryValue.Contains("*"))
+                    {
+                        var pattern = "^" + Regex.Escape(queryValue).Replace("\\*", ".*") + "$";
+                        if (!Regex.IsMatch(datasetValue, pattern))
+                        {
+                            return false;
+                        }
+                    }
+                    else if (queryValue != datasetValue)
                     {
                         return false;
                     }
                 }
             }
             return true;
-        }
-
-        private bool WildcardMatch(string pattern, string value)
-        {
-            // 处理 DICOM 通配符
-            pattern = pattern.Replace("*", ".*").Replace("?", ".");
-            return System.Text.RegularExpressions.Regex.IsMatch(
-                value ?? string.Empty,
-                "^" + pattern + "$",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase
-            );
         }
 
     }
