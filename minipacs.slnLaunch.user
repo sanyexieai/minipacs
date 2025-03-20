@@ -1,0 +1,17 @@
+[
+  {
+    "Name": "新建配置文件",
+    "Projects": [
+      {
+        "Path": "minipacs.csproj",
+        "Action": "Start",
+        "DebugTarget": "minipacs"
+      },
+      {
+        "Path": "miniviewer\\miniviewer.csproj",
+        "Action": "Start",
+        "DebugTarget": "miniviewer"
+      }
+    ]
+  }
+]
