@@ -22,11 +22,7 @@ namespace minipacs;
 /// </summary>
 public partial class MainWindow : Window
 {
-    private IDicomServer _echoServer;
-    private IDicomServer _storeServer;
-    private IDicomServer _findServer;
-    private IDicomServer _moveServer;
-    
+    private IDicomServer _server;
     private string _storageFolder = Path.Combine(Environment.CurrentDirectory, "DicomStorage");
     public ObservableCollection<DicomFileInfo> DicomFiles { get; set; }
 
@@ -51,7 +47,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            var port = 11122; // DICOM默认端口
+            var port = 11112; // 使用标准DICOM端口
 
             // 创建日志工厂
             using var loggerFactory = LoggerFactory.Create(builder =>
@@ -81,16 +77,11 @@ public partial class MainWindow : Window
             Directory.CreateDirectory(_storageFolder);
 
             // 启动DICOM服务器
-            _echoServer = serverFactory.Create<DicomCEchoProvider>(port);
-            _storeServer = serverFactory.Create<DicomCStoreProvider>(port + 1);
-            _findServer = serverFactory.Create<DicomCFindProvider>(port + 2);
-            _moveServer = serverFactory.Create<DicomCMoveProvider>(port + 3);
-
-            MessageBox.Show($"DICOM服务器已启动:\nC-ECHO: {port}\nC-STORE: {port + 1}\nC-FIND: {port + 2}\nC-MOVE: {port + 3}");
+            _server = serverFactory.Create<DicomUnifiedProvider>(port);
         }
         catch (Exception ex)
         {
-            MessageBox.Show("启动DICOM服务器失败: " + ex.Message);
+            MessageBox.Show($"初始化DICOM服务器失败: {ex.Message}");
         }
     }
     private async void ImportDicom_Click(object sender, RoutedEventArgs e)

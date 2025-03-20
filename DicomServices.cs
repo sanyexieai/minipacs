@@ -10,16 +10,31 @@ using System.Threading.Tasks;
 
 namespace minipacs
 {
-    public class DicomCStoreProvider : DicomService, IDicomServiceProvider, IDicomCStoreProvider
+    public class DicomUnifiedProvider : DicomService, 
+        IDicomServiceProvider, 
+        IDicomCEchoProvider,
+        IDicomCStoreProvider,
+        IDicomCFindProvider,
+        IDicomCMoveProvider
     {
+        private readonly ILogger _logger;
         private readonly string _storageFolder;
 
-        public DicomCStoreProvider(INetworkStream stream, Encoding fallbackEncoding, ILogger log, string storageFolder, DicomServiceDependencies dependencies)
-            : base(stream, fallbackEncoding, log, dependencies)
+        public DicomUnifiedProvider(INetworkStream stream, Encoding fallbackEncoding, ILogger logger, DicomServiceDependencies dependencies)
+            : base(stream, fallbackEncoding, logger, dependencies)
         {
-            _storageFolder = storageFolder;
+            _logger = logger;
+            _storageFolder = Path.Combine(Environment.CurrentDirectory, "DicomStorage");
         }
 
+        #region C-ECHO
+        public Task<DicomCEchoResponse> OnCEchoRequestAsync(DicomCEchoRequest request)
+        {
+            return Task.FromResult(new DicomCEchoResponse(request, DicomStatus.Success));
+        }
+        #endregion
+
+        #region C-STORE
         public async Task<DicomCStoreResponse> OnCStoreRequestAsync(DicomCStoreRequest request)
         {
             try
@@ -42,49 +57,9 @@ namespace minipacs
                 return new DicomCStoreResponse(request, DicomStatus.ProcessingFailure);
             }
         }
+        #endregion
 
-        public Task OnCStoreRequestExceptionAsync(string tempFileName, Exception e)
-        {
-            Logger?.LogError(e, "C-STORE request failed for temporary file: {tempFileName}", tempFileName);
-            return Task.CompletedTask;
-        }
-
-        public void OnConnectionClosed(Exception exception)
-        {
-            Logger?.LogInformation(exception, "Connection closed");
-        }
-
-        public Task OnReceiveAssociationRequestAsync(DicomAssociation association)
-        {
-            foreach (var pc in association.PresentationContexts)
-            {
-                pc.SetResult(DicomPresentationContextResult.Accept);
-            }
-            return SendAssociationAcceptAsync(association);
-        }
-
-        public Task OnReceiveAssociationReleaseRequestAsync()
-        {
-            return SendAssociationReleaseResponseAsync();
-        }
-
-        public void OnReceiveAbort(DicomAbortSource source, DicomAbortReason reason)
-        {
-            Logger?.LogWarning("Abort received: {source} - {reason}", source, reason);
-        }
-    }
-
-    public class DicomCFindProvider : DicomService, IDicomServiceProvider, IDicomCFindProvider
-    {
-        private readonly ILogger _logger;
-        private readonly string _storageFolder;
-
-        public DicomCFindProvider(INetworkStream stream, Encoding fallbackEncoding, ILogger logger, DicomServiceDependencies dependencies)
-            : base(stream, fallbackEncoding, logger, dependencies)
-        {
-            _logger = logger;
-            _storageFolder = Path.Combine(Environment.CurrentDirectory, "DicomStorage");
-        }
+        #region C-FIND
 
         public async IAsyncEnumerable<DicomCFindResponse> OnCFindRequestAsync(DicomCFindRequest request)
         {
@@ -125,7 +100,111 @@ namespace minipacs
             }
             yield return finalResponse;
         }
+        #endregion
 
+        #region C-MOVE
+
+        public async IAsyncEnumerable<DicomCMoveResponse> OnCMoveRequestAsync(DicomCMoveRequest request)
+        {
+            var matchingFiles = new List<string>();
+            var files = Directory.GetFiles(_storageFolder, "*.dcm", SearchOption.AllDirectories);
+
+            // 首先收集所有匹配的文件
+            foreach (var file in files)
+            {
+                try
+                {
+                    var dicomFile = await DicomFile.OpenAsync(file);
+                    if (MatchesQuery(request.Dataset, dicomFile.Dataset))
+                    {
+                        matchingFiles.Add(file);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger?.LogError(ex, "Failed to open DICOM file: {file}", file);
+                }
+            }
+
+            // 发送初始响应
+            yield return new DicomCMoveResponse(request, DicomStatus.Pending)
+            {
+                Remaining = matchingFiles.Count,
+                Completed = 0
+            };
+
+            var completed = 0;
+            var failed = 0;
+
+            // 处理每个匹配的文件
+            foreach (var file in matchingFiles)
+            {
+                try
+                {
+                    // TODO: 实现实际的文件传输逻辑
+                    completed++;
+                }
+                catch (Exception ex)
+                {
+                    Logger?.LogError(ex, "Failed to move file: {file}", file);
+                    failed++;
+                }
+
+                yield return new DicomCMoveResponse(request, DicomStatus.Pending)
+                {
+                    Remaining = matchingFiles.Count - completed - failed,
+                    Completed = completed
+                };
+            }
+
+            // 发送最终响应
+            yield return new DicomCMoveResponse(request, DicomStatus.Success)
+            {
+                Remaining = 0,
+                Completed = completed
+            };
+        }
+        #endregion
+
+        public Task OnReceiveAssociationRequestAsync(DicomAssociation association)
+        {
+            _logger.LogInformation($"收到关联请求: {association.CallingAE} -> {association.CalledAE}");
+            
+            foreach (var pc in association.PresentationContexts)
+            {
+                pc.SetResult(DicomPresentationContextResult.Accept);
+                _logger.LogInformation($"接受演示上下文: {pc.AbstractSyntax}");
+            }
+            
+            return SendAssociationAcceptAsync(association);
+        }
+
+        public Task OnReceiveAssociationReleaseRequestAsync()
+        {
+            return SendAssociationReleaseResponseAsync();
+        }
+
+        public void OnReceiveAbort(DicomAbortSource source, DicomAbortReason reason)
+        {
+            _logger.LogWarning($"收到中止: 来源={source}, 原因={reason}");
+        }
+
+        public void OnConnectionClosed(Exception exception)
+        {
+            if (exception != null)
+            {
+                _logger.LogError(exception, "连接关闭时发生错误");
+            }
+            else
+            {
+                _logger.LogInformation("连接正常关闭");
+            }
+        }
+
+        public Task OnCStoreRequestExceptionAsync(string tempFileName, Exception e)
+        {
+            throw new NotImplementedException();
+        }
         private async Task<string[]> GetDicomFiles()
         {
             try
@@ -161,12 +240,12 @@ namespace minipacs
         private DicomDataset CreateResponseDataset(DicomQueryRetrieveLevel level, DicomDataset source)
         {
             var response = new DicomDataset();
-            
+
             // 添加基本患者信息（这些在所有级别都需要）
             AddIfExists(response, source, DicomTag.PatientName);
             AddIfExists(response, source, DicomTag.PatientID);
             AddIfExists(response, source, DicomTag.PatientBirthDate);
-            
+
             // 添加研究相关信息
             AddIfExists(response, source, DicomTag.StudyInstanceUID);
             AddIfExists(response, source, DicomTag.StudyDate);
@@ -174,7 +253,7 @@ namespace minipacs
             AddIfExists(response, source, DicomTag.Modality);
             AddIfExists(response, source, DicomTag.NumberOfStudyRelatedSeries);
             AddIfExists(response, source, DicomTag.NumberOfStudyRelatedInstances);
-            
+
             // 根据查询级别添加额外信息
             switch (level)
             {
@@ -240,7 +319,7 @@ namespace minipacs
             foreach (var tag in query)
             {
                 var queryValue = query.GetString(tag.Tag);
-                
+
                 // 跳过空白字符串条件
                 if (string.IsNullOrWhiteSpace(queryValue))
                     continue;
@@ -265,192 +344,11 @@ namespace minipacs
             // 处理 DICOM 通配符
             pattern = pattern.Replace("*", ".*").Replace("?", ".");
             return System.Text.RegularExpressions.Regex.IsMatch(
-                value ?? string.Empty, 
-                "^" + pattern + "$", 
+                value ?? string.Empty,
+                "^" + pattern + "$",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase
             );
         }
 
-        public Task OnReceiveAssociationRequestAsync(DicomAssociation association)
-        {
-            foreach (var pc in association.PresentationContexts)
-            {
-                pc.SetResult(DicomPresentationContextResult.Accept);
-            }
-            return SendAssociationAcceptAsync(association);
-        }
-
-        public Task OnReceiveAssociationReleaseRequestAsync()
-        {
-            return SendAssociationReleaseResponseAsync();
-        }
-
-        public void OnReceiveAbort(DicomAbortSource source, DicomAbortReason reason)
-        {
-            _logger.LogWarning($"Abort received from {source}: {reason}");
-        }
-
-        public void OnConnectionClosed(Exception exception)
-        {
-            if (exception != null)
-            {
-                _logger.LogError(exception, "Connection closed with error");
-            }
-            else
-            {
-                _logger.LogInformation("Connection closed");
-            }
-        }
-    }
-
-    public class DicomCMoveProvider : DicomService, IDicomServiceProvider, IDicomCMoveProvider
-    {
-        private readonly string _storageFolder;
-
-        public DicomCMoveProvider(INetworkStream stream, Encoding fallbackEncoding, ILogger log, string storageFolder, DicomServiceDependencies dependencies)
-            : base(stream, fallbackEncoding, log, dependencies)
-        {
-            _storageFolder = storageFolder;
-        }
-
-        public async IAsyncEnumerable<DicomCMoveResponse> OnCMoveRequestAsync(DicomCMoveRequest request)
-        {
-            var matchingFiles = new List<string>();
-            var files = Directory.GetFiles(_storageFolder, "*.dcm", SearchOption.AllDirectories);
-
-            // 首先收集所有匹配的文件
-            foreach (var file in files)
-            {
-                try
-                {
-                    var dicomFile = await DicomFile.OpenAsync(file);
-                    if (MatchesQuery(request.Dataset, dicomFile.Dataset))
-                    {
-                        matchingFiles.Add(file);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger?.LogError(ex, "Failed to open DICOM file: {file}", file);
-                }
-            }
-
-            // 发送初始响应
-            yield return new DicomCMoveResponse(request, DicomStatus.Pending)
-            {
-                Remaining = matchingFiles.Count,
-                Completed = 0
-            };
-
-            var completed = 0;
-            var failed = 0;
-
-            // 处理每个匹配的文件
-            foreach (var file in matchingFiles)
-            {
-                try
-                {
-                    // TODO: 实现实际的文件传输逻辑
-                    completed++;
-                }
-                catch (Exception ex)
-                {
-                    Logger?.LogError(ex, "Failed to move file: {file}", file);
-                    failed++;
-                }
-
-                yield return new DicomCMoveResponse(request, DicomStatus.Pending)
-                {
-                    Remaining = matchingFiles.Count - completed - failed,
-                    Completed = completed
-                };
-            }
-
-            // 发送最终响应
-            yield return new DicomCMoveResponse(request, DicomStatus.Success)
-            {
-                Remaining = 0,
-                Completed = completed
-            };
-        }
-
-        private bool MatchesQuery(DicomDataset query, DicomDataset dataset)
-        {
-            foreach (var tag in query)
-            {
-                if (!dataset.Contains(tag.Tag)) return false;
-                
-                var queryValue = query.GetString(tag.Tag);
-                var datasetValue = dataset.GetString(tag.Tag);
-
-                if (!string.IsNullOrEmpty(queryValue) && 
-                    !datasetValue.Contains(queryValue, StringComparison.OrdinalIgnoreCase))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        public void OnConnectionClosed(Exception exception)
-        {
-            Logger?.LogInformation(exception, "Connection closed");
-        }
-
-        public Task OnReceiveAssociationRequestAsync(DicomAssociation association)
-        {
-            foreach (var pc in association.PresentationContexts)
-            {
-                pc.SetResult(DicomPresentationContextResult.Accept);
-            }
-            return SendAssociationAcceptAsync(association);
-        }
-
-        public Task OnReceiveAssociationReleaseRequestAsync()
-        {
-            return SendAssociationReleaseResponseAsync();
-        }
-
-        public void OnReceiveAbort(DicomAbortSource source, DicomAbortReason reason)
-        {
-            Logger?.LogWarning("Abort received: {source} - {reason}", source, reason);
-        }
-    }
-
-    public class DicomCEchoProvider : DicomService, IDicomServiceProvider, IDicomCEchoProvider
-    {
-        public DicomCEchoProvider(INetworkStream stream, Encoding fallbackEncoding, ILogger log, DicomServiceDependencies dependencies)
-            : base(stream, fallbackEncoding, log, dependencies)
-        {
-        }
-
-        public Task<DicomCEchoResponse> OnCEchoRequestAsync(DicomCEchoRequest request)
-        {
-            return Task.FromResult(new DicomCEchoResponse(request, DicomStatus.Success));
-        }
-
-        public void OnConnectionClosed(Exception exception)
-        {
-            Logger?.LogInformation(exception, "Connection closed");
-        }
-
-        public Task OnReceiveAssociationRequestAsync(DicomAssociation association)
-        {
-            foreach (var pc in association.PresentationContexts)
-            {
-                pc.SetResult(DicomPresentationContextResult.Accept);
-            }
-            return SendAssociationAcceptAsync(association);
-        }
-
-        public Task OnReceiveAssociationReleaseRequestAsync()
-        {
-            return SendAssociationReleaseResponseAsync();
-        }
-
-        public void OnReceiveAbort(DicomAbortSource source, DicomAbortReason reason)
-        {
-            Logger?.LogWarning("Abort received: {source} - {reason}", source, reason);
-        }
     }
 } 
