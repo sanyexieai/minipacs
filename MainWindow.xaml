@@ -81,6 +81,33 @@
                                     Click="StopServer_Click" 
                                     Width="100"/>
                         </Grid>
+
+                        <!-- 第二行：文件推送配置 -->
+                        <Grid Margin="0,5,0,0" x:Name="PushConfigGrid" IsEnabled="False">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0" 
+                                      Text="推送主机："
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,5,0"/>
+                            <TextBox Grid.Column="1" 
+                                    x:Name="PushHost"
+                                    Text="localhost"
+                                    Margin="0,0,10,0"/>
+
+                            <TextBlock Grid.Column="2" 
+                                      Text="推送端口："
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,5,0"/>
+                            <TextBox Grid.Column="3" 
+                                    x:Name="PushPort"
+                                    Text="11113"/>
+                        </Grid>
                     </StackPanel>
                 </GroupBox>
 

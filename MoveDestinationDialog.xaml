@@ -27,7 +27,7 @@
                     Text="11113"
                     Margin="0,0,0,10"/>
 
-            <TextBlock Text="目标主机：" 
+            <TextBlock Text="主机地址：" 
                      Grid.Row="1" Grid.Column="0"
                      VerticalAlignment="Center" 
                      Margin="0,0,10,10"/>
@@ -35,15 +35,6 @@
                     Grid.Row="1" Grid.Column="1"
                     Text="localhost"
                     Margin="0,0,0,10"/>
-
-            <TextBlock Text="目标端口：" 
-                     Grid.Row="2" Grid.Column="0"
-                     VerticalAlignment="Center" 
-                     Margin="0,0,10,0"/>
-            <TextBox x:Name="DestPortTextBox" 
-                    Grid.Row="2" Grid.Column="1"
-                    Text="11112"
-                    Margin="0,0,0,0"/>
         </Grid>
         
         <StackPanel Orientation="Horizontal" 

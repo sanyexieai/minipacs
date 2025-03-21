@@ -156,6 +156,8 @@ public partial class MainWindow : Window
             _clientFactory = serviceProvider.GetRequiredService<IDicomClientFactory>();
             // 更新状态指示灯为绿色
             ServerStatusLight.Fill = new SolidColorBrush(Colors.LimeGreen);
+            // 启用推送配置
+            PushConfigGrid.IsEnabled = true;
             RefreshList();
         }
         catch (Exception ex)
@@ -171,6 +173,8 @@ public partial class MainWindow : Window
         _server?.Dispose();
         // 更新状态指示灯为红色
         ServerStatusLight.Fill = new SolidColorBrush(Colors.Red);
+        // 禁用推送配置
+        PushConfigGrid.IsEnabled = false;
     }
 
     private void ToggleLeftPanel_Click(object sender, RoutedEventArgs e)
@@ -335,6 +339,23 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             MessageBox.Show($"C-MOVE失败: {ex.Message}", "错误");
+        }
+    }
+
+    // 添加属性来存储和获取推送配置
+    public string CurrentPushHost
+    {
+        get
+        {
+            return Dispatcher.Invoke(() => PushHost.Text);
+        }
+    }
+
+    public int CurrentPushPort
+    {
+        get
+        {
+            return Dispatcher.Invoke(() => int.Parse(PushPort.Text));
         }
     }
 }
