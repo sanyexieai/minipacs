@@ -181,24 +181,8 @@ namespace minipacs
                 _logger.LogInformation($"开始处理文件: {file}");
                 var dicomFile = await DicomFile.OpenAsync(file);
 
-                // 从主窗口获取配置
-                var mainWindow = Application.Current.MainWindow as MainWindow;
                 string host = "localhost";
                 int port = 11113;
-
-                if (mainWindow != null)
-                {
-                    try
-                    {
-                        host = mainWindow.CurrentPushHost;
-                        port = mainWindow.CurrentPushPort;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "获取推送配置失败，使用默认值");
-                    }
-                }
-
                 _logger.LogInformation($"使用推送配置: {host}:{port}");
 
                 var clientOptions = new DicomClientOptions
