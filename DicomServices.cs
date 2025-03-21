@@ -183,9 +183,10 @@ namespace minipacs
 
                 // 从主窗口获取配置
                 var mainWindow = Application.Current.MainWindow as MainWindow;
-                var host = mainWindow?.RemoteHost?.Text ?? "localhost";
-                var port = int.Parse(mainWindow?.RemotePort?.Text ?? "11122");
-
+                //var host = mainWindow?.RemoteHost?.Text ?? "localhost";
+                //var port = int.Parse(mainWindow?.RemotePort?.Text ?? "11122");
+                var host = "localhost";
+                var port = 11122;
                 var clientOptions = new DicomClientOptions
                 {
                     AssociationRequestTimeoutInMs = 5000,

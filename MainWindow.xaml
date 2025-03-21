@@ -5,52 +5,211 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:minipacs"
         mc:Ignorable="d"
-        Title="Mini PACS" Height="450" Width="800">
+        Title="Mini PACS" Height="600" Width="1000">
     <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="LeftColumn" Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition x:Name="RightColumn" Width="*"/>
+        </Grid.ColumnDefinitions>
 
-        <!-- 服务器配置 -->
-        <GroupBox Header="服务器配置" Margin="10">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="监听端口：" VerticalAlignment="Center"/>
-                <TextBox x:Name="ServerPort" Width="100" Text="11112" Margin="5,0,10,0"/>
-                <Button Content="启动服务器" Click="StartServer_Click" Margin="0,0,10,0"/>
-                <Button Content="停止服务器" Click="StopServer_Click"/>
-            </StackPanel>
-        </GroupBox>
+        <!-- 左侧面板 -->
+        <DockPanel x:Name="LeftPanel" Grid.Column="0" Margin="10">
+            <Button DockPanel.Dock="Right" 
+                    x:Name="LeftPanelToggleButton"
+                    Click="ToggleLeftPanel_Click"
+                    Width="20" 
+                    Height="50"
+                    VerticalAlignment="Center"
+                    Content="&gt;"
+                    Margin="5,0,0,0"/>
 
-        <!-- 远程服务器配置 -->
-        <GroupBox Grid.Row="1" Header="远程服务器配置" Margin="10">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="主机：" VerticalAlignment="Center"/>
-                <TextBox x:Name="RemoteHost" Width="150" Text="localhost" Margin="5,0,10,0"/>
-                <TextBlock Text="端口：" VerticalAlignment="Center"/>
-                <TextBox x:Name="RemotePort" Width="100" Text="11122" Margin="5,0,10,0"/>
-            </StackPanel>
-        </GroupBox>
+            <DockPanel>
+                <!-- 服务器配置 -->
+                <GroupBox Header="服务端面板" DockPanel.Dock="Top" Margin="0,0,0,10">
+                    <StackPanel Margin="5">
+                        <Grid Margin="0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-        <!-- 操作按钮 -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="10">
-            <Button Content="导入DICOM" Click="ImportDicom_Click" Margin="0,0,10,0"/>
-            <Button Content="刷新列表" Click="RefreshList_Click"/>
-        </StackPanel>
+                            <!-- 状态指示灯 -->
+                            <Ellipse Grid.Column="0" 
+                                     x:Name="ServerStatusLight" 
+                                     Width="12" 
+                                     Height="12" 
+                                     Fill="Red"
+                                     Margin="0,0,10,0"
+                                     VerticalAlignment="Center">
+                                <Ellipse.Effect>
+                                    <DropShadowEffect BlurRadius="4" ShadowDepth="0"/>
+                                </Ellipse.Effect>
+                            </Ellipse>
 
-        <!-- 文件列表 -->
-        <ListView Grid.Row="3" ItemsSource="{Binding DicomFiles}" Margin="10">
-            <ListView.View>
-                <GridView>
-                    <GridViewColumn Header="患者姓名" DisplayMemberBinding="{Binding PatientName}" Width="150"/>
-                    <GridViewColumn Header="患者ID" DisplayMemberBinding="{Binding PatientID}" Width="100"/>
-                    <GridViewColumn Header="检查日期" DisplayMemberBinding="{Binding StudyDate}" Width="100"/>
-                    <GridViewColumn Header="模态" DisplayMemberBinding="{Binding Modality}" Width="80"/>
-                    <GridViewColumn Header="文件路径" DisplayMemberBinding="{Binding FilePath}" Width="300"/>
-                </GridView>
-            </ListView.View>
-        </ListView>
+                            <!-- 服务名称 -->
+                            <TextBlock Grid.Column="1" 
+                                      Text="服务名称：" 
+                                      VerticalAlignment="Center"/>
+                            <TextBox Grid.Column="2" 
+                                    x:Name="ServerAE" 
+                                    Text="MINIPACS" 
+                                    Margin="5,0,23,0"/>
+
+                            <!-- 端口设置 -->
+                            <TextBlock Grid.Column="3" 
+                                      Text="监听端口：" 
+                                      VerticalAlignment="Center"/>
+                            <TextBox Grid.Column="4" 
+                                    x:Name="ServerPort" 
+                                    Text="11112" 
+                                    Margin="5,0,38,0"/>
+
+                            <!-- 服务器控制按钮 -->
+                            <Button Grid.Column="5" 
+                                    Content="启动服务" 
+                                    Click="StartServer_Click" 
+                                    Width="100" 
+                                    Margin="0,0,10,0"/>
+                            <Button Grid.Column="6" 
+                                    Content="停止服务" 
+                                    Click="StopServer_Click" 
+                                    Width="100"/>
+                        </Grid>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- 操作按钮 -->
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,10">
+                    <Button Content="导入DICOM" Click="ImportDicom_Click" Width="100" Margin="0,0,10,0"/>
+                    <Button Content="刷新列表" Click="RefreshList_Click" Width="100"/>
+                </StackPanel>
+
+                <!-- 文件列表 -->
+                <ListView ItemsSource="{Binding DicomFiles}">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="患者姓名" DisplayMemberBinding="{Binding PatientName}" Width="100"/>
+                            <GridViewColumn Header="患者ID" DisplayMemberBinding="{Binding PatientID}" Width="80"/>
+                            <GridViewColumn Header="检查日期" DisplayMemberBinding="{Binding StudyDate}" Width="80"/>
+                            <GridViewColumn Header="模态" DisplayMemberBinding="{Binding Modality}" Width="60"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </DockPanel>
+        </DockPanel>
+
+        <!-- 分隔线 -->
+        <GridSplitter Grid.Column="1" 
+                      Width="5" 
+                      HorizontalAlignment="Center" 
+                      VerticalAlignment="Stretch"/>
+
+        <!-- 右侧面板 -->
+        <DockPanel x:Name="RightPanel" Grid.Column="2" Margin="10">
+            <Button DockPanel.Dock="Left" 
+                    x:Name="RightPanelToggleButton"
+                    Click="ToggleRightPanel_Click"
+                    Width="20" 
+                    Height="50"
+                    VerticalAlignment="Center"
+                    Content="&lt;"
+                    Margin="0,0,5,0"/>
+
+            <DockPanel>
+                <!-- 客户端面板 -->
+                <GroupBox Header="客户端面板" DockPanel.Dock="Top" Margin="0,0,0,10">
+                    <StackPanel Margin="5">
+                        <Grid Margin="0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- 远程服务器配置 -->
+                            <TextBlock Grid.Column="0" Grid.Row="0"
+                                     Text="远端主机："
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,5,5"/>
+                            <TextBox Grid.Column="1" Grid.Row="0"
+                                    x:Name="RemoteHost"
+                                    Text="localhost"
+                                    Margin="0,0,10,5"/>
+
+                            <TextBlock Grid.Column="2" Grid.Row="0"
+                                     Text="远端端口："
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,5,5"/>
+                            <TextBox Grid.Column="3" Grid.Row="0"
+                                    x:Name="RemotePort"
+                                    Text="11112"
+                                    Margin="0,0,0,5"/>
+
+                            <!-- 客户端名称 -->
+                            <TextBlock Grid.Column="0" Grid.Row="1"
+                                     Text="客户端名称："
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,5,5"/>
+                            <TextBox Grid.Column="1" Grid.Row="1"
+                                    x:Name="RemoteAE"
+                                    Text="PACSC"
+                                    Margin="0,0,10,5"/>
+
+                            <!-- 远端名称 -->
+                            <TextBlock Grid.Column="2" Grid.Row="1"
+                                     Text="远端名称："
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,5,5"/>
+                            <TextBox Grid.Column="3" Grid.Row="1"
+                                    x:Name="RemoteCalledAE"
+                                    Text="MINIPACS"
+                                    Margin="0,0,0,5"/>
+
+                            <!-- 操作按钮 -->
+                            <StackPanel Grid.Column="0" Grid.ColumnSpan="4" Grid.Row="2" 
+                                      Orientation="Horizontal" 
+                                      Margin="0,5,0,0">
+                                <Button Content="C-ECHO" Width="100" Margin="0,0,10,0" Click="Button_Click"/>
+                                <Button Content="C-FIND" Width="100" Click="Button_Click_1"/>
+                                <Button x:Name="CmoveButton" 
+                                        Content="C-MOVE" 
+                                        Width="100" 
+                                        Margin="10,0,0,0"
+                                        Click="CmoveButton_Click"
+                                        Visibility="Collapsed"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Find结果列表 -->
+                <ListView x:Name="StudyListView" 
+                          SelectionChanged="StudyListView_SelectionChanged">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="患者姓名" DisplayMemberBinding="{Binding PatientName}" Width="100"/>
+                            <GridViewColumn Header="患者ID" DisplayMemberBinding="{Binding PatientID}" Width="80"/>
+                            <GridViewColumn Header="检查日期" DisplayMemberBinding="{Binding StudyDate}" Width="80"/>
+                            <GridViewColumn Header="模态" DisplayMemberBinding="{Binding Modality}" Width="60"/>
+                            <GridViewColumn Header="序列数" DisplayMemberBinding="{Binding SeriesCount}" Width="60"/>
+                            <GridViewColumn Header="图像数" DisplayMemberBinding="{Binding ImageCount}" Width="60"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </DockPanel>
+        </DockPanel>
     </Grid>
 </Window>
